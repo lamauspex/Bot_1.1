@@ -14,64 +14,20 @@ dp = Dispatcher()
 # Зададим имя базы данных
 DB_NAME = 'quiz_bot.db'
 
+# Переменные для хранения статистики
+user_status = {}
 
 # Структура квиза
-quiz_data = [
-    {
-        'question': 'Что такое Python?',
-        'options': ['Язык программирования', 'Тип данных', 'Музыкальный инструмент', 'Змея на английском'],
-        'correct_option': 0
-    },
-    {
-        'question': 'Какой тип данных используется для хранения целых чисел?',
-        'options': ['int', 'float', 'str', 'natural'],
-        'correct_option': 0
-    },
-    {
-        'question': 'Какой тип данных является изменяемым?',
-        'options':['float', 'list', 'bool', 'str'],
-        'correct_option': 1
-    },
-    {
-        'question': 'Что добавляет метод append?',
-        'options': ['Один элемент в конец списка', 'Все элементы в конец списка', 'Один элемент в начало списка'],
-        'correct_option': 0
-    },
-    {
-        'question': 'Что вернет следующий код: print(type([]))?',
-        'options': ["<class 'dict'>", "<class 'list'>", "<class 'tuple'>", "<class 'set'>"],
-        'correct_option': 1
-    },
-    {
-        'question': 'Какой из следующих операторов используется для проверки равенства двух значений в Python?',
-        'options': ['=', '==', '!=', '==='],
-        'correct_option': 1
-    },
-    {
-        'question': 'Какой из следующих способов используется для обработки исключений в Python?',
-        'options': ['try...catch', 'catch...except', 'try...except', 'throw...catch'],
-        'correct_option': 2
-    },
-    {
-        'question': 'Как называется процесс, при котором сервер обрабатывает запросы и генерирует ответы для клиентов?',
-        'options': ['Обработка запросов', 'Запрос-ответный цикл', 'Управление сессией', 'Модель данных'],
-        'correct_option': 0
-    },
-    {
-        'question': 'Как называется процесс, при котором сервер сохраняет информацию о состоянии пользователя между запросами?',
-        'options': ['Кэширование','Аутентификация', 'Шифрование', 'Управление сессией'],
-        'correct_option': 3
-    },
-    {
-        'question': 'Что такое веб-сервер?',
-        'options': ['Программа, которая обрабатывает и отвечает на HTTP-запросы', 'Устройство, которое хранит файлы', 'Язык программирования для создания веб-приложений', 'База данных для хранения пользовательских данных'],
-        'correct_option': 1
-    }
-    
-]
+try:
+    with open('quiz_data.json', 'r', encoding='utf-8') as file:
+        quiz_data = json.load(file)
+except FileNotFoundError:
+       print("Файл не найден. Проверь путь к файлу.")
+except json.JSONDecodeError:
+       print("Ошибка при декодировании JSON. Проверь формат файла.")
 
 
-
+# Функция генерации клавиатуры 
 def generate_options_keyboard(answer_options, right_answer):
     builder = InlineKeyboardBuilder()
 
@@ -85,8 +41,11 @@ def generate_options_keyboard(answer_options, right_answer):
     return builder.as_markup()
 
 
+# Хэндлер для правильного ответа
 @dp.callback_query(F.data == "right_answer")
 async def right_answer(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    user_status[user_id]['correct'] +=1
 
     await callback.bot.edit_message_reply_markup(
         chat_id=callback.from_user.id,
@@ -104,11 +63,15 @@ async def right_answer(callback: types.CallbackQuery):
     if current_question_index < len(quiz_data):
         await get_question(callback.message, callback.from_user.id)
     else:
-        await callback.message.answer("Это был последний вопрос. Квиз завершен!")
+        await callback.message.answer(f"Это был последний вопрос. Квиз завершен! Правильных ответов: {user_status[user_id]['correct']}, Неправильных ответов: {user_status[user_id]['incorrect']}.")
 
 
+# Хэндлер для неправильного ответа
 @dp.callback_query(F.data == "wrong_answer")
 async def wrong_answer(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    user_status[user_id]['incorrect'] +=1
+    
     await callback.bot.edit_message_reply_markup(
         chat_id=callback.from_user.id,
         message_id=callback.message.message_id,
@@ -129,7 +92,7 @@ async def wrong_answer(callback: types.CallbackQuery):
     if current_question_index < len(quiz_data):
         await get_question(callback.message, callback.from_user.id)
     else:
-        await callback.message.answer("Это был последний вопрос. Квиз завершен!")
+        await callback.message.answer(f"Это был последний вопрос. Квиз завершен! Правильных ответов: {user_status[user_id]['correct']}, Неправильных ответов: {user_status[user_id]['incorrect']}.")
 
 
 # Хэндлер на команду /start
@@ -140,6 +103,7 @@ async def cmd_start(message: types.Message):
     await message.answer("Добро пожаловать в квиз!", reply_markup=builder.as_markup(resize_keyboard=True))
 
 
+# Получение текущего вопроса
 async def get_question(message, user_id):
 
     # Получение текущего вопроса из словаря состояний пользователя
@@ -150,13 +114,17 @@ async def get_question(message, user_id):
     await message.answer(f"{quiz_data[current_question_index]['question']}", reply_markup=kb)
 
 
+# Начало нового квиза
 async def new_quiz(message):
     user_id = message.from_user.id
     current_question_index = 0
+    # Инициализация статистики для нового пользователя
+    user_status[user_id] = {'correct': 0, 'incorrect': 0}
     await update_quiz_index(user_id, current_question_index)
     await get_question(message, user_id)
 
 
+#  Получение индекса квиза
 async def get_quiz_index(user_id):
      # Подключаемся к базе данных
      async with aiosqlite.connect(DB_NAME) as db:
@@ -170,6 +138,7 @@ async def get_quiz_index(user_id):
                 return 0
 
 
+# Обновление индекса квиза
 async def update_quiz_index(user_id, index):
     # Создаем соединение с базой данных (если она не существует, она будет создана)
     async with aiosqlite.connect(DB_NAME) as db:
@@ -188,7 +157,7 @@ async def cmd_quiz(message: types.Message):
     await new_quiz(message)
 
 
-
+# Создание таблицы
 async def create_table():
     # Создаем соединение с базой данных (если она не существует, она будет создана)
     async with aiosqlite.connect(DB_NAME) as db:
