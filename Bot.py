@@ -4,7 +4,7 @@ from imports import*
 logging.basicConfig(level=logging.INFO)
 
 # Указываем наш токен
-API_TOKEN = '7699784378:AAGKzhQxqdXgUZCKdCuqsTrVVvGSA15JQE0'
+API_TOKEN = 'MY_TOKEN'
 
 # Объект бота
 bot = Bot(token=API_TOKEN)
